@@ -3,7 +3,7 @@ import random
 import cv2
 import numpy as np
 from torchvision import transforms
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, dataset
 class MyDataset(Dataset):
     def __init__(self,root,transform=None):
         self.path=root#os.path.join(root,subfolder)
@@ -40,8 +40,8 @@ class BaseDataSet(Dataset):
     def __init__(self,dir_root,resize=None,transform=None):
         self.dir_root=dir_root
         self.landmark_dir=os.path.join(dir_root,"landmarks")
-        self.reference_dir=os.path.join(dir_root,"original")
-        self.target_dir=os.path.join(dir_root,"target")
+        self.reference_dir=os.path.join(dir_root,"crop_img")
+        self.target_dir=os.path.join(dir_root,"only_bg")
         self.transform=transform
         self.landmark_list=[os.path.join(self.landmark_dir,filename) for filename in os.listdir(self.landmark_dir)]
         self.reference_list=[os.path.join(self.reference_dir,filename) for filename in os.listdir(self.reference_dir)]
@@ -73,20 +73,27 @@ class BaseDataSet(Dataset):
                     randidx=random.randint(0,len(self.landmark_list)-1)
                 combine.append([landmark_img,self.reference_list[randidx],target_img])
         return combine
+class BgMixerDataset(BaseDataSet):
+    def __init__(self, dir_root, resize, transform):
+        super().__init__(dir_root, resize=resize, transform=transform)
+    
+    
 if __name__=='__main__':
     transform=transforms.Compose([transforms.ToTensor()])
-    dataset=BaseDataSet("raw",256,transform)
-    # dataset=BaseDataSet("photos")
+    dataset=BgMixerDataset("raw",256,transform)
     print(len(dataset))
-    dataloader=DataLoader(dataset,batch_size=2,drop_last=True)
-    print(len(dataloader))
-    for i,(x1,x2,y) in enumerate(dataloader):
-        print(x1.shape)
-        print(x2.shape)
-        print(y.shape)
-        ynp=y[0].numpy().transpose(1,2,0)
-        cv2.imwrite("test.png",ynp)
-        break
+    # dataset=BaseDataSet("raw",256,transform)
+    # # dataset=BaseDataSet("photos")
+    # print(len(dataset))
+    # dataloader=DataLoader(dataset,batch_size=2,drop_last=True)
+    # print(len(dataloader))
+    # for i,(x1,x2,y) in enumerate(dataloader):
+    #     print(x1.shape)
+    #     print(x2.shape)
+    #     print(y.shape)
+    #     ynp=y[0].numpy().transpose(1,2,0)
+    #     cv2.imwrite("test.png",ynp)
+    #     break
 
     # for i in range(10):
     #     transform=transforms.Compose([transforms.ToTensor(),transforms.RandomHorizontalFlip()])

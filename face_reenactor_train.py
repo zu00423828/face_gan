@@ -1,7 +1,6 @@
 import os
 import argparse
 import cv2
-from numpy import zeros
 # from torch.nn.modules.loss import L1Loss
 # from torch.utils import data
 from tqdm import tqdm
@@ -12,7 +11,7 @@ import torch.nn as nn
 from torchvision.transforms import transforms
 from torch.utils.data import DataLoader,random_split
 from model.face_reenactor_network import Unet, PatchGan, VGGPerceptualLoss,Unet2
-from datasettool import MyDataset,BaseDataSet
+from dataset_tool import MyDataset,BaseDataSet
 
 
 def save_checkpoint(model_G, model_D):
@@ -165,5 +164,5 @@ if __name__ == "__main__":
     BCELoss = nn.BCELoss().to(device)
     CELoss = nn.BCEWithLogitsLoss().to(device)
     L1loss = nn.L1Loss().to(device)
-    w1, w2, w3, w4 = 10, 30,40 ,20 
+    w1, w2, w3, w4 = 1,10,10,10 
     train()
