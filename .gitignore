@@ -4,6 +4,7 @@
 *.png
 *.mp4
 checkpoint*
+runs/
 log/
 .vscode
 tqdm_test.py

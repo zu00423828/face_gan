@@ -1,4 +1,5 @@
 import os
+from posix import listdir
 import random
 import cv2
 import numpy as np
@@ -41,11 +42,13 @@ class BaseDataSet(Dataset):
         self.dir_root=dir_root
         self.landmark_dir=os.path.join(dir_root,"landmarks")
         self.reference_dir=os.path.join(dir_root,"crop_img")
-        self.target_dir=os.path.join(dir_root,"only_bg")
+        self.target_dir=os.path.join(dir_root,"crop_img")
+        self.facemask_dir=os.path.join(dir_root,"face_mask")
         self.transform=transform
         self.landmark_list=[os.path.join(self.landmark_dir,filename) for filename in os.listdir(self.landmark_dir)]
         self.reference_list=[os.path.join(self.reference_dir,filename) for filename in os.listdir(self.reference_dir)]
         self.target_list=[os.path.join(self.target_dir,filename) for filename in os.listdir(self.target_dir)]
+        self.facemask_list=[os.path.join(self.facemask_dir,filename) for filename in os.listdir(self.facemask_dir)]
         self.combinelist=self.rand_combine()
         self.resize=resize
     def __len__(self):
@@ -54,29 +57,45 @@ class BaseDataSet(Dataset):
         landmark_img=cv2.imread(self.combinelist[index][0],cv2.IMREAD_GRAYSCALE)
         reference_img=cv2.imread(self.combinelist[index][1])
         target_img=cv2.imread(self.combinelist[index][2])
+        facemask_img=cv2.imread(self.combinelist[index][3],cv2.IMREAD_GRAYSCALE)
+        # reference_img=reference_img[:,:,::-1].copy()
+        # target_img=target_img[:,:,::-1].copy()
         if self.resize is not None:
             landmark_img=cv2.resize(landmark_img,(self.resize,self.resize))
             reference_img=cv2.resize(reference_img,(self.resize,self.resize))
             target_img=cv2.resize(target_img,(self.resize,self.resize))
+            facemask_img=cv2.resize(facemask_img,(self.resize,self.resize))
         if self.transform is not None:
             landmark_img=self.transform(landmark_img)
             reference_img=self.transform(reference_img)
             target_img=self.transform(target_img)
-        return landmark_img,reference_img,target_img
+            target_map=self.transform(facemask_img)
+        return landmark_img,reference_img,target_img,target_map
     def rand_combine(self):
         combine=[]
-        for idx,(landmark_img,target_img) in enumerate(zip(self.landmark_list,self.target_list)):
+        for idx,(landmark_img,target_img,facemask_img) in enumerate(zip(self.landmark_list,self.target_list,self.facemask_list)):
             for i in range(50):#產生隨機數量 x1 x2 y組合
                 randidx=random.randint(0,len(self.landmark_list)-1)
             # for idx2,reference_img in enumerate(self.reference_list):
                 while idx==randidx:
                     randidx=random.randint(0,len(self.landmark_list)-1)
-                combine.append([landmark_img,self.reference_list[randidx],target_img])
+                combine.append([landmark_img,self.reference_list[randidx],target_img,facemask_img])
         return combine
 class BgMixerDataset(BaseDataSet):
     def __init__(self, dir_root, resize, transform):
         super().__init__(dir_root, resize=resize, transform=transform)
-    
+        self.root=dir_root
+        self.x1_dir=os.path.join(self.root,"only_bg")
+        self.x2_dir=os.path.join(self.root,"only_face")
+        self.y_dir=os.path.join(self.root,"crop_img")
+        x1_list=[os.path.join(self.x1_dir,filename) for filename in os.listdir(self.x1_dir)]
+        x2_list=[os.path.join(self.x2_dir,filename) for filename in os.listdir(self.x2_dir)]
+        y_list=[os.path.join(self.y_dir,filename) for filename in os.listdir(self.y_dir)]
+        self.combinelist=[[x1,x2,y] for x1,x2,y in zip(x1_list,x2_list,y_list)]
+        # print(x1_list)
+        print(len(x1_list),len(x2_list),len(y_list))
+        self.resize=resize
+        self.transform=transform
     
 if __name__=='__main__':
     transform=transforms.Compose([transforms.ToTensor()])

@@ -78,12 +78,14 @@ for idx,filename in enumerate(imglist):
         top_y=centroid_pos[1]-192
         botton_y=centroid_pos[1]+192
         crop_img=img[top_y:botton_y,left_x:right_x]
-        crop_mask=mask_nobg[top_y:botton_y,left_x:right_x]
+        crop_facemask=mask_nobg[top_y:botton_y,left_x:right_x]
+        crop_bgmask=mask_bg[top_y:botton_y,left_x:right_x]
         crop_face=only_face[top_y:botton_y,left_x:right_x]
         crop_bg=only_bg[top_y:botton_y,left_x:right_x]
         crop_landmark=landmarks_img[top_y:botton_y,left_x:right_x]
         cv2.imwrite(f"raw/crop_img/{idx}.png",crop_img)
-        cv2.imwrite(f"raw/face_mask/{idx}.png",crop_mask)
+        cv2.imwrite(f"raw/face_mask/{idx}.png",crop_facemask)
+        cv2.imwrite(f"raw/bg_mask/{idx}.png",crop_bgmask)
         cv2.imwrite(f"raw/only_face/{idx}.png",crop_face)
         cv2.imwrite(f"raw/landmarks/{idx}.png",crop_landmark)
         cv2.imwrite(f"raw/only_bg/{idx}.png",crop_bg)
