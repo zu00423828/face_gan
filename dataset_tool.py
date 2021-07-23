@@ -1,42 +1,12 @@
+import enum
 import os
-from posix import listdir
 import random
 import cv2
 import numpy as np
 from torchvision import transforms
-from torch.utils.data import Dataset, DataLoader, dataset
-class MyDataset(Dataset):
-    def __init__(self,root,transform=None):
-        self.path=root#os.path.join(root,subfolder)
-        self.image_list=os.listdir(self.path)
-        self.transform=transform
-    def __len__(self):
-        return len(self.image_list)
-    def __getitem__(self, item):
-        image_path=os.path.join(self.path,self.image_list[item])
-        image=cv2.imread(image_path,flags=cv2.IMREAD_COLOR)
-        # image=image[:,:,::-1].copy()
-        half_w=image.shape[1]//2
-        x=image[:,:half_w,:]
-        y=image[:,half_w:,:]
-        if self.transform is not None:
-            x=self.transform(x)
-            y=self.transform(y)
-            # x=image[:,:,:half_w]
-            # y=image[:,:,half_w:]
-        return x,y
-    
-def loadData(root,subfolder,batch_size,shuffle=True):
-    transform = transforms.Compose([
-    transforms.ToTensor(),  # (H, W, C) -> (C, H, W) & (0, 255) -> (0, 1)
-    transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))  # (0, 1) -> (-1, 1)
-    ])
-    dataset=MyDataset(root,subfolder,transform=transform)
-    return DataLoader(dataset,batch_size=batch_size,shuffle=shuffle)
-
-
-
-
+from torch.utils.data import Dataset, DataLoader
+import glob
+import dlib
 class BaseDataSet(Dataset):
     def __init__(self,dir_root,resize=None,transform=None):
         self.dir_root=dir_root
@@ -81,6 +51,77 @@ class BaseDataSet(Dataset):
                     randidx=random.randint(0,len(self.landmark_list)-1)
                 combine.append([landmark_img,self.reference_list[randidx],target_img,facemask_img])
         return combine
+
+augment=transforms.Compose([transforms.ToTensor(),transforms.Resize(256)])
+
+class TestDataSet(Dataset):
+    def __init__(self, root):
+        img_dir = glob.glob(f"{root}/img/*/")
+        landmark_dir = glob.glob(f"{root}/landmarks/*/")
+        face_mask_dir = glob.glob(f"{root}/face_mask/*/")
+        self.img_list, self.landmark_list, self.face_mask_list = self.get_file_list(img_dir,landmark_dir,face_mask_dir)
+        self.video_name=[item.split("/")[-2] for item in self.img_list]
+
+    def __len__(self):
+        return len(self.video_name)
+    def __getitem__(self, index):
+        rand_idx=self.random_get(index)
+        landmark_img=cv2.imread(self.landmark_list[index],cv2.IMREAD_GRAYSCALE)
+        reference_img=cv2.imread(self.img_list[rand_idx])
+        face_mask_img=cv2.imread(self.face_mask_list[index],cv2.IMREAD_GRAYSCALE)
+        target_img=cv2.imread(self.img_list[index])
+        landmark_img=augment(landmark_img)
+        reference_img=augment(reference_img)
+        face_mask_img=augment(face_mask_img)
+        target_img=augment(target_img)
+        return landmark_img,reference_img,target_img,face_mask_img
+
+    def landmark(img):
+        pass
+        detector=dlib.get_frontal_face_detector()
+        predictor=dlib.shape_predictor("shape_predictor_81_face_landmarks.dat")
+        dest=detector(img,1)
+        for i,d in enumerate(dest):
+            if i>0:
+                break
+            detected_landmark=predictor(img,d).parts()
+            landmarks=[[p.x,p.y] for p in detected_landmark]
+            face_contour=landmarks[0:17]
+            forehead=[]
+            for i in [78,74,79,73,72,69,68,76,75,77]:#[78,74,79,73,72,80,71,70,69,68,76,75,77]:
+                forehead.append(landmarks[i])
+            for item in forehead:
+                face_contour.append(item)
+            ih,iw,ic=img.shape
+            landmarks_img=np.zeros((ih,iw).np.uint8)
+            face_mask=np.zeros((ih,iw).np.uint8)
+            cv2.fillPoly(face_mask,(np.array(face_contour)),(255,255,255),8,0)
+            cv2.fillPoly(landmarks_img,np.array(landmarks).reshape(-1,1,2),(255,255,255),8,0)
+            
+    def get_file_list(self,img_dir,landmark_dir,face_mask_dir):
+        all_img_list = []
+        all_landmark_list = []
+        all_face_mask_list = []
+        for dir in img_dir:
+            temp_list = [os.path.join(dir, file) for file in os.listdir(dir)]
+            all_img_list.extend(temp_list)
+        for dir in landmark_dir:
+            temp_list = [os.path.join(dir, file) for file in os.listdir(dir)]
+            all_landmark_list.extend(temp_list)
+        for dir in face_mask_dir:
+            temp_list = [os.path.join(dir, file) for file in os.listdir(dir)]
+            all_face_mask_list.extend(temp_list)
+        return all_img_list, all_landmark_list, all_face_mask_list
+    def random_get(self,idx):
+        min_idx=self.video_name.index(self.video_name[idx])
+        max_idx=len(self.video_name)-1-self.video_name[::-1].index(self.video_name[idx])
+        r_idx=random.randint(min_idx,max_idx)
+        while idx==r_idx:
+            r_idx=random.randint(min_idx,max_idx)
+        return  r_idx
+
+
+
 class BgMixerDataset(BaseDataSet):
     def __init__(self, dir_root, resize, transform):
         super().__init__(dir_root, resize=resize, transform=transform)
@@ -98,39 +139,13 @@ class BgMixerDataset(BaseDataSet):
         self.transform=transform
     
 if __name__=='__main__':
-    transform=transforms.Compose([transforms.ToTensor()])
-    dataset=BgMixerDataset("raw",256,transform)
-    print(len(dataset))
-    # dataset=BaseDataSet("raw",256,transform)
-    # # dataset=BaseDataSet("photos")
+    # transform=transforms.Compose([transforms.ToTensor()])
+    # dataset=BgMixerDataset("raw",256,transform)
     # print(len(dataset))
-    # dataloader=DataLoader(dataset,batch_size=2,drop_last=True)
-    # print(len(dataloader))
-    # for i,(x1,x2,y) in enumerate(dataloader):
-    #     print(x1.shape)
-    #     print(x2.shape)
-    #     print(y.shape)
-    #     ynp=y[0].numpy().transpose(1,2,0)
-    #     cv2.imwrite("test.png",ynp)
-    #     break
+    # a = TestDataSet("/home/yuan/hdd/avspeech_preprocess/test/train")
+    # print(len(a))
+    a = TestDataSet("/home/yuan/hdd/avspeech_preprocess/train")
 
-    # for i in range(10):
-    #     transform=transforms.Compose([transforms.ToTensor(),transforms.RandomHorizontalFlip()])
-    #     dataset=MyDataset("combined/train",transform=transform)
-    #     train_data=DataLoader(dataset,batch_size=4,shuffle=True,num_workers=4)
-    #     t2i=dataset[0][0].numpy().transpose(1,2,0)
-    #     cv2.imshow(f"{i}",t2i)
-    #     cv2.waitKey(0)
-    # print(len(dataset))
-    # print(len(dataset))
-    # print(dataset[0][0].shape)
-    # t2i=(dataset[0][0].numpy().transpose(1,2,0)) #or t.permute(1,2,0).numpy() c,h,w to h,w,c 
-    # t2i=(t2i*255).astype(np.uint8)
-    # cv2.imshow("test",t2i)
 
-    # cv2.waitKey(0)
-    # cv2.destroyAllWindows()
 
-    # print(len(train_data))
-    # for i,x in enumerate(train_data):
-    #     print(type(x),len(x))
+ 

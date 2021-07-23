@@ -11,14 +11,14 @@ import numpy as np
 import torch.optim as optim
 import torch.nn as nn
 from torchvision.utils import make_grid
-from torchvision.transforms import transforms
-from torch.utils.data import DataLoader, random_split,Subset
+
+from torch.utils.data import DataLoader
 from model.face_reenactor_network import Pix2Pix, PatchGan, VGGPerceptualLoss,TVLoss
 from model.resunet_network import ResUnet
 from torch.utils.tensorboard import SummaryWriter
 from adabelief_pytorch import AdaBelief
 
-from dataset_tool import MyDataset, BaseDataSet
+from dataset_tool import  BaseDataSet,TestDataSet
 
 
 def save_checkpoint(model_G, model_D):
@@ -62,7 +62,7 @@ def cal_discriminator_loss(x, y, y_pred):
     fake = torch.zeros(fake_d.size(), device=device)
     real_loss = BCELoss(real_d, real)
     fake_loss = BCELoss(fake_d, fake)
-    return real_loss,fake_loss,real_d,fake_d
+    return real_loss,fake_loss
 
 
 def discriminator_out(x, y):
@@ -75,14 +75,15 @@ def train(train_dataloader,val_dataloader):
     step_epoch = len(train_dataloader)
     if args.load_checkpoint:
         load_checkpoint(generator, discriminator)
+    # eval(0,val_dataloader)
     for epoch in range(args.max_epoch):
         generator.train()
         discriminator.train()
         g_optimizer.zero_grad()
         d_optimizer.zero_grad()
         print('Starting Epoch: {}'.format(epoch+1))
-        running_l1_loss, running_perceptual_loss, running_ad_loss,running_ce_loss,running_tv_loss,running_d_loss = 0.,0., 0., 0., 0.,0.
-        prog_bar = tqdm(train_dataloader)
+        running_l1_loss, running_perceptual_loss, running_ad_loss,running_ce_loss,running_d_loss = 0.,0., 0., 0., 0.#,0.,running_tv_loss
+        prog_bar = tqdm(train_dataloader,position=0,leave=True)
         for step, data in enumerate(prog_bar):
             now_step=(epoch*step_epoch)+(step+1)
             x1 = data[0].to(device)
@@ -92,7 +93,7 @@ def train(train_dataloader,val_dataloader):
             x = torch.cat((x1, x2), 1)
             y_pred,map = generator(x)
             #計算D loss
-            real_loss,fake_loss,real_d,fake_d = cal_discriminator_loss(x, y, y_pred.detach())
+            real_loss,fake_loss= cal_discriminator_loss(x, y, y_pred.detach())
             d_loss=real_loss+fake_loss
             d_loss.backward()
             d_optimizer.step()
@@ -104,8 +105,8 @@ def train(train_dataloader,val_dataloader):
             real_y=torch.ones(d_pred.size(),device=device)
             ad_loss = BCELoss(d_pred,real_y)
             celoss=BCELoss(map,y_map)
-            tvloss=TVloss(y_pred)
-            g_loss = w1*l1loss+w2*perceptual_loss+w3*ad_loss+w4*celoss+tvloss
+            # tvloss=TVloss(y_pred)
+            g_loss = w1*l1loss+w2*perceptual_loss+w3*ad_loss+w4*celoss#+tvloss
             g_loss.backward()
 
             if step%100==0:
@@ -116,7 +117,7 @@ def train(train_dataloader,val_dataloader):
                 writer.add_scalar("TrainLoss/DiscriminatorLoss/real",real_loss,now_step)
                 writer.add_scalar("TrainLoss/DiscriminatorLoss/fake",fake_loss,now_step)
                 writer.add_scalar("TrainLoss/DiscriminatorLoss/all",d_loss,now_step)
-                writer.add_scalar("TrainLoss/Generator/TVLoss",tvloss,now_step)
+                # writer.add_scalar("TrainLoss/Generator/TVLoss",tvloss,now_step)
                 grid_input_x1=make_grid(x1)
                 grid_input_x2=make_grid(x2[:,[2,1,0],:,:])
                 grid_input=make_grid(x[:,[0,3,2,1],:,:])
@@ -124,17 +125,11 @@ def train(train_dataloader,val_dataloader):
                 grid_output_map=make_grid(map)
                 grid_target=make_grid(y[:,[2,1,0],:,:])
                 grid_target_map=make_grid(y_map)
-                grid_real_d=make_grid(real_d.unsqueeze(1))
-                grid_fake_d=make_grid(fake_d.unsqueeze(1))
-                grid_fake_g=make_grid(d_pred.unsqueeze(1))
                 writer.add_image("input/x1",grid_input_x1,now_step)
                 writer.add_image("input/x2",grid_input_x2,now_step)
                 writer.add_image("input/image",grid_input,now_step)
                 writer.add_image("output/map",grid_output_map,now_step)
                 writer.add_image("output/image",grid_output,now_step)
-                writer.add_image("discriminator/real",grid_real_d,now_step)
-                writer.add_image("discriminator/fake",grid_fake_d,now_step)
-                writer.add_image("discriminator/fake_G",grid_fake_g,now_step)
                 writer.add_image("target/map",grid_target_map,now_step)
                 writer.add_image("target/img",grid_target,now_step)
                 save_checkpoint(generator, discriminator)
@@ -142,13 +137,17 @@ def train(train_dataloader,val_dataloader):
             running_perceptual_loss += perceptual_loss.item()
             running_ad_loss+=ad_loss.item()
             running_ce_loss += celoss.item()
-            running_tv_loss+=tvloss.item()
+            # running_tv_loss+=tvloss.item()
             running_d_loss += d_loss.item()
             next_step = step+1
-            prog_bar.set_description('L1:{:0.4f},PLoss:{:0.4f},ADLoss:{:0.4f},CELoss:{:0.4f},TVLoss:{:0.4},DLoss:{:0.4f}'.format(
+            # prog_bar.set_description('L1:{:0.4f},PLoss:{:0.4f},ADLoss:{:0.4f},CELoss:{:0.4f},TVLoss:{:0.4f},DLoss:{:0.4f}'.format(
+            #     running_l1_loss / next_step, running_perceptual_loss / next_step,running_ad_loss/next_step,
+            #     running_ce_loss/next_step,running_tv_loss/next_step,running_d_loss / next_step,))
+            prog_bar.set_description('L1:{:0.4f},P:{:0.4f},AD:{:0.4f},CE:{:0.4f},D:{:0.4f}'.format(
                 running_l1_loss / next_step, running_perceptual_loss / next_step,running_ad_loss/next_step,
-                running_ce_loss/next_step,running_tv_loss/next_step,running_d_loss / next_step,))
-            prog_bar.update()
+                running_ce_loss/next_step,running_d_loss / next_step))
+            # prog_bar.update()
+            # prof.step()
             if step % args.backward_ratio == 0:
                 g_optimizer.step()
                 g_optimizer.zero_grad()
@@ -177,14 +176,14 @@ def eval(epoch, val_dataloader):
             real_y=torch.ones(d_pred.size(),device=device)
             ad_loss = BCELoss(d_pred,real_y)
             ce_loss = BCELoss(y_pre_map,y_map)
-            tvloss=TVloss(y_pred)
-            real_loss,fake_loss,real_d,fake_d = cal_discriminator_loss(x, y, y_pred.detach())
+            # tvloss=TVloss(y_pred)
+            real_loss,fake_loss = cal_discriminator_loss(x, y, y_pred.detach())
             d_loss = real_loss+fake_loss
             running_l1_loss += l1loss.item()
             running_perceptual_loss += perceptual_loss.item()
             running_ad_loss+=ad_loss.item()
             running_ce_loss += ce_loss.item()
-            running_tv_loss+=tvloss.item()
+            # running_tv_loss+=tvloss.item()
             running_d_loss += d_loss.item()
             visual_data(epoch, step, x1, x2, y_pred,y_pre_map, y,y_map)
             if step%100==0:
@@ -195,16 +194,21 @@ def eval(epoch, val_dataloader):
                 writer.add_scalar("ValLoss/DiscriminatorLoss/real",real_loss,now_step)
                 writer.add_scalar("ValLoss/DiscriminatorLoss/fake",fake_loss,now_step)
                 writer.add_scalar("ValLoss/DiscriminatorLoss/all",d_loss,now_step)
-                writer.add_scalar("ValLoss/Generator/TVLoss",tvloss,now_step)
+                # writer.add_scalar("ValLoss/Generator/TVLoss",tvloss,now_step)
         print('EVAL| L1:{:0.4f},PLoss:{:0.4f},ADLoss:{:0.4f},CELoss:{:0.4f},DLoss:{:0.4f}'.format(
             running_l1_loss / all_step, running_perceptual_loss / all_step, running_ad_loss/ all_step,
             running_ce_loss/all_step,running_d_loss / all_step))
 
 def work_init_fn(worker_id):
-    works_seed=torch.initial_seed()%2**32
-    np.random.seed(works_seed)
-    random.seed(works_seed)
-    torch.manual_seed(works_seed)
+    # works_seed=torch.initial_seed()%2**32
+    seed=torch.utils.data.get_worker_info.seed%(2**32-1)
+    # np.random.seed(works_seed)
+    # random.seed(works_seed)
+    # torch.manual_seed(works_seed)
+    # seed=10
+    # seed+=worker_id
+    np.random.seed(seed)
+    print(seed)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -236,15 +240,30 @@ if __name__ == "__main__":
     L1loss = nn.L1Loss().to(device)
     TVloss=TVLoss(2)
     w1, w2, w3, w4 = 100, 100,1, 1
-    transform = transforms.Compose([transforms.ToTensor()])
-    origin_dataset=BaseDataSet(
-        args.input_dir, args.resize, transform=transform)
-    train_len = int(len(origin_dataset)*0.8)
-    train_dataset,val_dataset=Subset(origin_dataset,[i for i in range(train_len)]),Subset(origin_dataset,[i for i in range(train_len,len(origin_dataset))])
-    print(f"all:{len(origin_dataset)},train:{len(train_dataset)},val:{len(val_dataset)}")
+    # transform = transforms.Compose([transforms.ToTensor()])
+    # origin_dataset=BaseDataSet(
+    #     args.input_dir, args.resize, transform=transform)
+   
+    # origin_dataset=TestDataSet(
+    #     args.input_dir)
+    # train_len = int(len(origin_dataset)*0.8)
+    # train_dataset,val_dataset=Subset(origin_dataset,[i for i in range(train_len)]),Subset(origin_dataset,[i for i in range(train_len,len(origin_dataset))])
+    
+    train_dir=os.path.join(args.input_dir,"train")
+    val_dir=os.path.join(args.input_dir,"val")
+    print(train_dir)
+    train_dataset=TestDataSet(train_dir)
+    val_dataset=TestDataSet(val_dir)
+    print(f"train:{len(train_dataset)},val:{len(val_dataset)}")
     train_dataloader = DataLoader(
-        train_dataset, args.batch_size, shuffle=True, drop_last=True, num_workers=4)#,worker_init_fn=work_init_fn)
+        train_dataset, args.batch_size, shuffle=True, drop_last=True, num_workers=2,pin_memory=True)#,worker_init_fn=work_init_fn)
     val_dataloader=DataLoader(
-        val_dataset,args.batch_size, shuffle=True, drop_last=True, num_workers=4)#,worker_init_fn=work_init_fn)
+        val_dataset,args.batch_size, shuffle=True, drop_last=True, num_workers=2,pin_memory=True)#,worker_init_fn=work_init_fn)
     writer=SummaryWriter()
+    # from torch.profiler import profile,ProfilerActivity
+    # prof= profile(schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=2),
+    #     # activities=[ProfilerActivity.CPU,ProfilerActivity.CUDA],
+    #     on_trace_ready=torch.profiler.tensorboard_trace_handler('./log/resnet18'),
+    #     record_shapes=True,
+    #     with_stack=True)
     train(train_dataloader,val_dataloader)

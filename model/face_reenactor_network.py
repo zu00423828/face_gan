@@ -260,7 +260,7 @@ class ResNet(nn.Module):
         return out
 if __name__ =="__main__":
     from torchsummary import summary
-    net=Unet(4,3).cuda()
+    net=Pix2Pix(4,3).cuda()
     summary(net,(4,256,256),batch_size=16)
     # net=Unet2().cuda()
     # summary(net,(3,256,256),batch_size=1)

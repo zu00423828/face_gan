@@ -8,10 +8,12 @@ class PreActivateDoubleConv(nn.Module):
         super(PreActivateDoubleConv, self).__init__()
         self.double_conv = nn.Sequential(
             nn.BatchNorm2d(in_channels),
-            nn.ReLU(inplace=True),
+            # nn.ReLU(inplace=True),
+            nn.LeakyReLU(0.2,inplace=True),
             nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
             nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True),
+            # nn.ReLU(inplace=True),
+            nn.LeakyReLU(0.2,inplace=True),
             nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)
         )
 
@@ -54,9 +56,9 @@ class PreActivateResBlock(nn.Module):
 
 
 class DeepResUnet(nn.Module):
-    def __init__(self,out_clasess=1):
+    def __init__(self,in_channels,out_clasess=1):
         super().__init__()
-        self.down_conv1=PreActivateResBlock(1,64)
+        self.down_conv1=PreActivateResBlock(in_channels,64)
         self.down_conv2=PreActivateResBlock(64,128)
         self.down_conv3=PreActivateResBlock(128,256)
         self.down_conv4=PreActivateResBlock(256,512)
@@ -65,7 +67,9 @@ class DeepResUnet(nn.Module):
         self.up_conv3=PreActivateResUpBlock(256+512,256)
         self.up_conv2=PreActivateResUpBlock(128+256,128)
         self.up_conv1=PreActivateResUpBlock(128+64,64)
-        self.conv_last=nn.Conv2d(64,out_clasess,1,1,1)
+        self.map_layer=nn.Sequential(nn.Upsample(scale_factor=2), nn.Conv2d(128,1,1),nn.Sigmoid())
+        self.conv_last=nn.Sequential(nn.Conv2d(64,out_clasess,1),nn.Tanh())
+        # self.conv_last=nn.Conv2d(64,out_clasess,1,1,1)
     def forward(self, x):
         x,skip1_out=self.down_conv1(x)
         x,skip2_out=self.down_conv2(x)
@@ -75,9 +79,10 @@ class DeepResUnet(nn.Module):
         x=self.up_conv4(x,skip4_out)
         x=self.up_conv3(x,skip3_out)
         x=self.up_conv2(x,skip2_out)
+        map=self.map_layer(x)
         x=self.up_conv1(x,skip1_out)
         x=self.conv_last(x)
-        return x
+        return x,map
 
 
 class DoubleConv(nn.Module):
@@ -86,10 +91,12 @@ class DoubleConv(nn.Module):
         self.double_conv = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
             nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True),
+            # nn.ReLU(inplace=True),
+            nn.LeakyReLU(0.2,inplace=True),
             nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
             nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True),
+            # nn.ReLU(inplace=True),
+            nn.LeakyReLU(0.2,inplace=True),
         )
     def forward(self,x):
         return self.double_conv(x)
@@ -101,7 +108,8 @@ class ResBlock(nn.Module):
             nn.BatchNorm2d(out_channels))
         self.double_conv = DoubleConv(in_channels, out_channels)
         self.down_sample = nn.MaxPool2d(2)
-        self.relu = nn.ReLU()
+        # self.relu = nn.ReLU(inplace=True)
+        self.relu = nn.LeakyReLU(0.2,inplace=True)
     def forward(self, x):
         identity = self.downsample(x)
         out = self.double_conv(x)
@@ -134,9 +142,8 @@ class ResUnet(nn.Module):
         self.up_conv2=UpBlock(128+256,128)
         self.up_conv1=UpBlock(128+64,64)
         self.map_layer=nn.Sequential(nn.Upsample(scale_factor=2), nn.Conv2d(128,1,1),nn.Sigmoid())
-        self.conv_last=nn.Sequential(nn.Conv2d(64,out_clasess,1),nn.Sigmoid())
+        self.conv_last=nn.Sequential(nn.Conv2d(64,out_clasess,1),nn.Tanh())
     def forward(self,x):
-
         x,skip1_out=self.down_conv1(x)
         x,skip2_out=self.down_conv2(x)
         x,skip3_out=self.down_conv3(x)
@@ -149,13 +156,52 @@ class ResUnet(nn.Module):
         x=self.up_conv1(x,skip1_out)
         x=self.conv_last(x)
         return x,map
+class resUnet256(nn.Module):
+    def __init__(self,in_channels,out_clasess):
+        super(resUnet256,self).__init__()
+        #local_generator_encoder
+        self.down_conv1=ResBlock(in_channels,64)
+        self.down_conv2=ResBlock(64,128)
+        self.down_conv3=ResBlock(128,256)
+        self.down_conv4=ResBlock(256,512)
+        #global_generator
+        self.downsample=nn.MaxPool2d(2)
+        self.global_generator=ResUnet(4,3)
+        #local_generator_decoder
+        self.double_conv=DoubleConv(512,1024)
+        self.up_conv4=UpBlock(512+1024,512)
+        self.up_conv3=UpBlock(256+512,256)
+        self.up_conv2=UpBlock(128+256,128)
+        self.up_conv1=UpBlock(128+64,64)
+        self.map_layer=nn.Sequential(nn.Upsample(scale_factor=2), nn.Conv2d(128,1,1),nn.Sigmoid())
+        self.conv_last=nn.Sequential(nn.Conv2d(64,out_clasess,1),nn.Sigmoid())
+    def forward(self,x):
+        downsample_input=self.downsample(x)
+        global_generator_out=self.global_generator(downsample_input)
+        out,skip1_out=self.down_conv1(x)
+        out,skip2_out=self.down_conv2(out)
+        out,skip3_out=self.down_conv3(out)
+        out,skip4_out=self.down_conv4(out)
+        out=self.double_conv(x)
+        out=self.up_conv4(out,skip4_out)
+        out=self.up_conv3(out,skip3_out)
+        out=self.up_conv2(out,skip2_out)
+        map=self.map_layer(out)
+        out=self.up_conv1(out,skip1_out)
+        out=self.conv_last(out)
+        return x,map
+
+
+
 if __name__=="__main__":
     from torchsummary import summary
 
     # deepresunet=DeepResUnet().cuda()
     # summary(deepresunet,(1,256,256))
 
-    resunet=ResUnet(4,3).cuda()
-    summary(resunet,(4,256,256),batch_size=1)
+    resunet=ResUnet(4,3)
+    deepresunet=DeepResUnet(4,3)
+    summary(deepresunet,(4,256,256),batch_size=1,device="cpu")
+    summary(resunet,(4,256,256),batch_size=1,device="cpu")
 
 
