@@ -37,17 +37,19 @@ def load_checkpoint(model_G, model_D):
     model_D.load_state_dict(torch.load(D_model_path))
 
 
-def visual_data(epoch, step, x1, x2, pre_y,pre_map, y,y_map):
+def visual_data(epoch, step, x1, x2, pre_y,y):
     logdir = f"log/{args.out_checkpoint}/{epoch}"
     os.makedirs(logdir, exist_ok=True)
     for idx, (input_x1, input_x2, out_y, real_y) in enumerate(zip(x1, x2, pre_y, y)):
         step_idx = step#*16+idx
-        x1_img = cv2.cvtColor((input_x1.cpu().numpy().transpose(
-            1, 2, 0)*255).astype(np.uint8), cv2.COLOR_GRAY2BGR)
+        # x1_img = cv2.cvtColor((input_x1.cpu().numpy().transpose(
+        #     1, 2, 0)*255).astype(np.uint8), cv2.COLOR_GRAY2BGR)
+        x1_img = (input_x1.cpu().numpy().transpose(
+            1, 2, 0)*255).astype(np.uint8)
         x2_img = (input_x2.cpu().numpy().transpose(
             1, 2, 0)*255).astype(np.uint8)
         y_pred_img = (out_y.cpu().numpy().transpose(
-            1, 2, 0)*255).astype(np.uint8)
+            1, 2, 0)*255 ).astype(np.uint8)
         y_img = (real_y.cpu().numpy().transpose(1, 2, 0)*255).astype(np.uint8)
         result = np.concatenate([x1_img, x2_img, y_pred_img, y_img], axis=1)
         resultpath = f"{logdir}/{step_idx}.png"
@@ -86,15 +88,22 @@ def train(train_dataloader,val_dataloader):
         prog_bar = tqdm(train_dataloader,position=0,leave=True)
         for step, data in enumerate(prog_bar):
             now_step=(epoch*step_epoch)+(step+1)
-            x1 = data[0].to(device)
-            x2 = data[1].to(device)
-            y = data[2].to(device)
-            y_map=data[3].to(device)
-            x = torch.cat((x1, x2), 1)
+            # x1 = data[0].to(device)
+            # x2 = data[1].to(device)
+            # y = data[2].to(device)
+            # y_map=data[3].to(device)
+            # x = torch.cat((x1, x2), 1)
+            x = data[0].to(device)
+            y = data[1].to(device)
+            y_map=data[2].to(device)
+   
+
+
+
             y_pred,map = generator(x)
             #計算D loss
             real_loss,fake_loss= cal_discriminator_loss(x, y, y_pred.detach())
-            d_loss=real_loss+fake_loss
+            d_loss=(real_loss+fake_loss)
             d_loss.backward()
             d_optimizer.step()
             d_optimizer.zero_grad()
@@ -118,16 +127,17 @@ def train(train_dataloader,val_dataloader):
                 writer.add_scalar("TrainLoss/DiscriminatorLoss/fake",fake_loss,now_step)
                 writer.add_scalar("TrainLoss/DiscriminatorLoss/all",d_loss,now_step)
                 # writer.add_scalar("TrainLoss/Generator/TVLoss",tvloss,now_step)
-                grid_input_x1=make_grid(x1)
-                grid_input_x2=make_grid(x2[:,[2,1,0],:,:])
-                grid_input=make_grid(x[:,[0,3,2,1],:,:])
+                grid_input_x1=make_grid(x[:,[2,1,0],:,:])
+                grid_input_x2=make_grid(x[:,[5,4,3],:,:])
+                # grid_input=make_grid(x[:,[2,1,0],:,:])
+                # grid_input=make_grid(x[:,[0,3,2,1],:,:])
                 grid_output=make_grid(y_pred[:,[2,1,0],:,:])
                 grid_output_map=make_grid(map)
                 grid_target=make_grid(y[:,[2,1,0],:,:])
                 grid_target_map=make_grid(y_map)
                 writer.add_image("input/x1",grid_input_x1,now_step)
                 writer.add_image("input/x2",grid_input_x2,now_step)
-                writer.add_image("input/image",grid_input,now_step)
+                # writer.add_image("input/image",grid_input,now_step)
                 writer.add_image("output/map",grid_output_map,now_step)
                 writer.add_image("output/image",grid_output,now_step)
                 writer.add_image("target/map",grid_target_map,now_step)
@@ -146,7 +156,6 @@ def train(train_dataloader,val_dataloader):
             prog_bar.set_description('L1:{:0.4f},P:{:0.4f},AD:{:0.4f},CE:{:0.4f},D:{:0.4f}'.format(
                 running_l1_loss / next_step, running_perceptual_loss / next_step,running_ad_loss/next_step,
                 running_ce_loss/next_step,running_d_loss / next_step))
-            # prog_bar.update()
             # prof.step()
             if step % args.backward_ratio == 0:
                 g_optimizer.step()
@@ -161,14 +170,21 @@ def eval(epoch, val_dataloader):
     with torch.no_grad():
         running_l1_loss, running_perceptual_loss, running_ad_loss,running_ce_loss,running_tv_loss,running_d_loss =0., 0., 0., 0., 0.,0.
         all_step = len(val_dataloader)
-        print(all_step)
-        for step, data in enumerate(val_dataloader):
+        print("EVAL")
+        pro_bar=tqdm(val_dataloader)
+        # for step, data in enumerate(val_dataloader):
+        for step, data in enumerate(pro_bar):
             now_step=(epoch*all_step)+(step+1)
-            x1 = data[0].to(device)
-            x2 = data[1].to(device)
-            y = data[2].to(device)
-            y_map=data[3].to(device)
-            x = torch.cat([x1, x2], dim=1)
+            # x1 = data[0].to(device)
+            # x2 = data[1].to(device)
+            # y = data[2].to(device)
+            # y_map=data[3].to(device)
+            # x = torch.cat([x1, x2], dim=1)
+
+            x = data[0].to(device)
+            y = data[1].to(device)
+            y_map=data[2].to(device)
+
             y_pred,y_pre_map = generator(x)
             l1loss = L1loss(y_pred, y)
             perceptual_loss = vgg_perceptual_loss(y_pred, y)
@@ -178,14 +194,13 @@ def eval(epoch, val_dataloader):
             ce_loss = BCELoss(y_pre_map,y_map)
             # tvloss=TVloss(y_pred)
             real_loss,fake_loss = cal_discriminator_loss(x, y, y_pred.detach())
-            d_loss = real_loss+fake_loss
+            d_loss = (real_loss+fake_loss)*0.5
             running_l1_loss += l1loss.item()
             running_perceptual_loss += perceptual_loss.item()
             running_ad_loss+=ad_loss.item()
             running_ce_loss += ce_loss.item()
             # running_tv_loss+=tvloss.item()
             running_d_loss += d_loss.item()
-            visual_data(epoch, step, x1, x2, y_pred,y_pre_map, y,y_map)
             if step%100==0:
                 writer.add_scalar("ValLoss/Generator/L1Loss",l1loss,now_step)
                 writer.add_scalar("ValLoss/Generator/PerceptualLoss",perceptual_loss,now_step)
@@ -194,6 +209,7 @@ def eval(epoch, val_dataloader):
                 writer.add_scalar("ValLoss/DiscriminatorLoss/real",real_loss,now_step)
                 writer.add_scalar("ValLoss/DiscriminatorLoss/fake",fake_loss,now_step)
                 writer.add_scalar("ValLoss/DiscriminatorLoss/all",d_loss,now_step)
+                visual_data(epoch, step, x[:,0:3,:,:], x[:,3:,:,:], y_pred,y)
                 # writer.add_scalar("ValLoss/Generator/TVLoss",tvloss,now_step)
         print('EVAL| L1:{:0.4f},PLoss:{:0.4f},ADLoss:{:0.4f},CELoss:{:0.4f},DLoss:{:0.4f}'.format(
             running_l1_loss / all_step, running_perceptual_loss / all_step, running_ad_loss/ all_step,
@@ -220,13 +236,20 @@ if __name__ == "__main__":
     parser.add_argument("--learning_rate", dest="lr", default=2e-4, type=float)
     parser.add_argument("--out_checkpoint", dest="out_checkpoint", type=str)
     parser.add_argument("--load_checkpoint", dest="load_checkpoint", type=str)
+    parser.add_argument("--model", dest="model",default="resunet", type=str)
+    parser.add_argument("--input_channel",dest="input_channnel",default=6,type=int)
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    # generator = Pix2Pix(4, 3).to(device=device)  # x1=1c,x2=3c
-   
-    generator = ResUnet(4, 3).to(device=device)
-    discriminator = PatchGan(7).to(device=device)  # x1=1c,x2=3c,y=3c
+    # torch.backends.cudnn.enabled=True
+    # torch.backends.cudnn.benchmark=True
+    # torch.backends.cudnn.deterministic=True
+
+    if args.model=="resunet":
+        generator = ResUnet(6, 3).to(device=device)
+    else:
+        generator = Pix2Pix(6, 3).to(device=device)  # x1=1c,x2=3c
+    discriminator = PatchGan(9).to(device=device)  # x1=1c,x2=3c,y=3c
     # g_optimizer = optim.Adam(generator.parameters(),
     #                          lr=args.lr, betas=(0.5, 0.999))
     # d_optimizer = optim.Adam(discriminator.parameters(),
@@ -237,28 +260,19 @@ if __name__ == "__main__":
                              lr=args.lr, eps=1e-16 , betas=(0.5, 0.999), weight_decouple=True, rectify=True,print_change_log=False)
     vgg_perceptual_loss = VGGPerceptualLoss().to(device)
     BCELoss = nn.BCELoss().to(device)
+    # CELoss=nn.CrossEntropyLoss().to(device)
     L1loss = nn.L1Loss().to(device)
-    TVloss=TVLoss(2)
+    # TVloss=TVLoss(2)
     w1, w2, w3, w4 = 100, 100,1, 1
-    # transform = transforms.Compose([transforms.ToTensor()])
-    # origin_dataset=BaseDataSet(
-    #     args.input_dir, args.resize, transform=transform)
-   
-    # origin_dataset=TestDataSet(
-    #     args.input_dir)
-    # train_len = int(len(origin_dataset)*0.8)
-    # train_dataset,val_dataset=Subset(origin_dataset,[i for i in range(train_len)]),Subset(origin_dataset,[i for i in range(train_len,len(origin_dataset))])
-    
     train_dir=os.path.join(args.input_dir,"train")
     val_dir=os.path.join(args.input_dir,"val")
-    print(train_dir)
-    train_dataset=TestDataSet(train_dir)
-    val_dataset=TestDataSet(val_dir)
+    train_dataset=TestDataSet(train_dir,resize=args.resize)
+    val_dataset=TestDataSet(val_dir,resize=args.resize)
     print(f"train:{len(train_dataset)},val:{len(val_dataset)}")
     train_dataloader = DataLoader(
-        train_dataset, args.batch_size, shuffle=True, drop_last=True, num_workers=2,pin_memory=True)#,worker_init_fn=work_init_fn)
+        train_dataset, args.batch_size, shuffle=True, drop_last=True, num_workers=4,pin_memory=True)#,worker_init_fn=work_init_fn)
     val_dataloader=DataLoader(
-        val_dataset,args.batch_size, shuffle=True, drop_last=True, num_workers=2,pin_memory=True)#,worker_init_fn=work_init_fn)
+        val_dataset,args.batch_size, shuffle=True, drop_last=True, num_workers=4,pin_memory=True)#,worker_init_fn=work_init_fn)
     writer=SummaryWriter()
     # from torch.profiler import profile,ProfilerActivity
     # prof= profile(schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=2),

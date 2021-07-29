@@ -1,4 +1,4 @@
-from numpy import str0
+from numpy import float32, str0
 import torch
 import torch.nn as nn
 from torch.nn.modules import pooling
@@ -77,7 +77,7 @@ class Patch_Conv(nn.Module):
         elif last_layer:
             self.conv=nn.Sequential(nn.Conv2d(in_channels,out_channels,kernel_size=4,stride=strides,padding=1),nn.Sigmoid())
         else:
-            self.conv=nn.Sequential(nn.Conv2d(in_channels,out_channels,kernel_size=4,stride=strides,padding=1),nn.BatchNorm2d(out_channels),nn.LeakyReLU(0.2,True))
+            self.conv=nn.Sequential(nn.Conv2d(in_channels,out_channels,kernel_size=4,stride=strides,padding=1,bias=False),nn.BatchNorm2d(out_channels),nn.LeakyReLU(0.2,True))
     def forward(self,x):
         out=self.conv(x)
         return out
@@ -202,7 +202,7 @@ class Unet2(nn.Module):
         c10=self.conv10(c9)
         return c10
 
-def conv3x3(self,in_channels,out_channels,stride=1):
+def conv3x3(in_channels,out_channels,stride=1):
     return nn.Conv2d(in_channels,out_channels,kernel_size=3,stride=stride,padding=1)
 
 class ResBlock(nn.Module):
@@ -260,8 +260,11 @@ class ResNet(nn.Module):
         return out
 if __name__ =="__main__":
     from torchsummary import summary
-    net=Pix2Pix(4,3).cuda()
-    summary(net,(4,256,256),batch_size=16)
+    net=Pix2Pix(6,3).cuda()
+    summary(net,(6,256,256),batch_size=16)
+    r_t=torch.randn((2,6,256,256),dtype=torch.float32).cuda()
+    out,out2=net(r_t)
+    print(out)
     # net=Unet2().cuda()
     # summary(net,(3,256,256),batch_size=1)
     # net2=PatchGan(6).cuda()

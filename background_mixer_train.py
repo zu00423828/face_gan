@@ -5,12 +5,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from torch.nn.modules.loss import BCELoss
 from model.background_mixer import Unet,PatchGan,VGGPerceptualLoss,TVLoss
 from torchvision.transforms import transforms
 from torch.utils.data import DataLoader,random_split
 import argparse
-from dataset_tool import MyDataset,BaseDataSet
+from dataset_tool import BgMixerDataset
 from adabelief_pytorch import AdaBelief
 
 def save_checkpoint(model_G, model_D):
@@ -44,7 +43,7 @@ def discriminator_out(x,y):
 def Train():
     transform = transforms.Compose([transforms.ToTensor()])
     # train_dataset = MyDataset("combined/train", transform=transform)
-    train_dataset= BaseDataSet("photos",transform=transform)
+    train_dataset= BgMixerDataset("photos",transform=transform)
     train_len=int(len(train_dataset)*0.8)
     val_len=len(train_dataset)-train_len
     train_dataset,val_dataset=random_split(train_dataset,[train_len,val_len])
@@ -60,10 +59,7 @@ def Train():
         print('Starting Epoch: {}'.format(epoch+1))
         running_l1_loss, running_perceptual_loss, running_d_loss,running_adv_loss,running_tvloss = 0., 0., 0., 0.,0.
         prog_bar = tqdm(train_dataloader)
-        # for step, data in prog_bar:
         for step,data in enumerate(prog_bar):
-            # g_optimizer.zero_grad()
-            # d_optimizer.zero_grad()
             x1 = data[0].to(device)
             x2=data[1].to(device)
             y = data[2].to(device)
@@ -92,6 +88,7 @@ def Train():
                 d_optimizer.step()
                 g_optimizer.zero_grad()
                 d_optimizer.zero_grad()
+                save_checkpoint(generator, discriminator)
         eval(val_dataset)
         save_checkpoint(generator, discriminator)
 def eval(val_dataset):
@@ -135,18 +132,14 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     generator = Unet(4,3).to(device=device)#x1=1c,x2=3c
     discriminator = PatchGan(7).to(device=device)#x1=1c,x2=3c,y=3c
-    g_optimizer = optim.Adam(generator.parameters(),
-                             lr=args.lr, betas=(0.5, 0.999))
-    d_optimizer = optim.Adam(discriminator.parameters(),
-                             lr=args.lr, betas=(0.5, 0.999))
     g_optimizer = AdaBelief(generator.parameters(),
-                             lr=args.lr, eps=1e-16 , betas=(0.9, 0.999), weight_decouple=True, rectify=True,weight_decay=1e-4,print_change_log=False)
+                             lr=args.lr, eps=1e-16 , betas=(0.5, 0.999), weight_decouple=True, rectify=True,print_change_log=False)
     d_optimizer = AdaBelief(discriminator.parameters(),
-                             lr=args.lr, eps=1e-16 , betas=(0.9, 0.999), weight_decouple=True, rectify=True,weight_decay=1e-4,print_change_log=False)
+                             lr=args.lr, eps=1e-16 , betas=(0.5, 0.999), weight_decouple=True, rectify=True,print_change_log=False)
     vgg_perceptual_loss = VGGPerceptualLoss().to(device)
-    vgg_perceptual_loss = VGGPerceptualLoss().to(device)
+
     BCELoss = nn.BCELoss().to(device)
     L1loss = nn.L1Loss().to(device)
     TVloss=TVLoss(2)
-    w3, w4,w5 =33,33,33 
+    w3, w4,w5 =100,33,100 
     Train()

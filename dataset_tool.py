@@ -3,8 +3,9 @@ import os
 import random
 import cv2
 import numpy as np
+import torch
 from torchvision import transforms
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 import glob
 import dlib
 class BaseDataSet(Dataset):
@@ -52,29 +53,33 @@ class BaseDataSet(Dataset):
                 combine.append([landmark_img,self.reference_list[randidx],target_img,facemask_img])
         return combine
 
-augment=transforms.Compose([transforms.ToTensor(),transforms.Resize(256)])
-
+# augment=transforms.Compose([transforms.ToTensor(),transforms.Resize(256)])#transforms.Normalize(mean=[0.5,0.5,0.5],std=[0.5,0.5,0.5])
+# augment=transforms.Compose([transforms.ToTensor(),transforms.Resize(256)])
+augment=transforms.Compose([transforms.ToTensor()])
 class TestDataSet(Dataset):
-    def __init__(self, root):
+    def __init__(self, root,resize):
         img_dir = glob.glob(f"{root}/img/*/")
         landmark_dir = glob.glob(f"{root}/landmarks/*/")
         face_mask_dir = glob.glob(f"{root}/face_mask/*/")
         self.img_list, self.landmark_list, self.face_mask_list = self.get_file_list(img_dir,landmark_dir,face_mask_dir)
         self.video_name=[item.split("/")[-2] for item in self.img_list]
-
+        self.resize=(resize,resize)
     def __len__(self):
         return len(self.video_name)
     def __getitem__(self, index):
         rand_idx=self.random_get(index)
-        landmark_img=cv2.imread(self.landmark_list[index],cv2.IMREAD_GRAYSCALE)
-        reference_img=cv2.imread(self.img_list[rand_idx])
-        face_mask_img=cv2.imread(self.face_mask_list[index],cv2.IMREAD_GRAYSCALE)
-        target_img=cv2.imread(self.img_list[index])
-        landmark_img=augment(landmark_img)
+        # landmark_img=cv2.imread(self.landmark_list[index],cv2.IMREAD_GRAYSCALE)
+        landmark_img=cv2.resize(cv2.imread(self.landmark_list[index]),self.resize,interpolation=cv2.INTER_AREA)
+        reference_img=cv2.resize(cv2.imread(self.img_list[rand_idx]),self.resize,interpolation=cv2.INTER_AREA)
+        face_mask_img=cv2.resize(cv2.imread(self.face_mask_list[index],cv2.IMREAD_GRAYSCALE),self.resize,interpolation=cv2.INTER_AREA)
+        target_img=cv2.resize(cv2.imread(self.img_list[index]),self.resize,interpolation=cv2.INTER_AREA)
+        landmark_img= augment(landmark_img)
         reference_img=augment(reference_img)
-        face_mask_img=augment(face_mask_img)
         target_img=augment(target_img)
-        return landmark_img,reference_img,target_img,face_mask_img
+        face_mask_img=augment(face_mask_img)
+        input_img=torch.cat([landmark_img,reference_img],dim=0)
+        return input_img,target_img,face_mask_img
+        # return landmark_img,reference_img,target_img,face_mask_img
 
     def landmark(img):
         pass
@@ -122,7 +127,7 @@ class TestDataSet(Dataset):
 
 
 
-class BgMixerDataset(BaseDataSet):
+class BgMixerDataset(TestDataSet):
     def __init__(self, dir_root, resize, transform):
         super().__init__(dir_root, resize=resize, transform=transform)
         self.root=dir_root
