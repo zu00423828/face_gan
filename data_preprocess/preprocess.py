@@ -15,114 +15,114 @@ def reshape_for_polyline(array):
 
 
 def face_split(frame):
-        ih,iw,ic=frame.shape
-        dest,score,idx=detector.run(frame,1)
-        if not  score:
+    ih,iw,ic=frame.shape
+    dest,score,idx=detector.run(frame,1)
+    if not  score:
+        return
+    if score[0]<args.confidence:
+        return
+    for i,face in enumerate(dest):
+        if i>0:
+            break
+        detected_landmarks=predictor(frame,face).parts()
+        landmarks=[[p.x,p.y] for p in detected_landmarks]
+        landmarks_array=np.array(landmarks)
+        min_x=min(landmarks_array[:,0])
+        min_y=min(landmarks_array[:,1])
+        max_x=max(landmarks_array[:,0])
+        max_y=max(landmarks_array[:,1])
+        h,w=max_y-min_y,max_x-min_x
+        # print("origin",h,w)
+        if h<100:
             return
-        if score[0]<args.confidence:
+        if h!=w:
+            min_x=min_x-((h-w)//2)-20
+            max_x=max_x+((h-w)//2)+20
+            min_y-=20
+            max_y+=20
+        # print(max_y-min_y,max_x-min_x)
+        if min_y<=0 or max_y>=ih:
+            #print("y> or y<")
             return
-        for i,face in enumerate(dest):
-            if i>0:
-                break
-            detected_landmarks=predictor(frame,face).parts()
-            landmarks=[[p.x,p.y] for p in detected_landmarks]
-            landmarks_array=np.array(landmarks)
-            min_x=min(landmarks_array[:,0])
-            min_y=min(landmarks_array[:,1])
-            max_x=max(landmarks_array[:,0])
-            max_y=max(landmarks_array[:,1])
-            h,w=max_y-min_y,max_x-min_x
-            # print("origin",h,w)
-            if h<100:
-                return
-            if h!=w:
-                min_x=min_x-((h-w)//2)-20
-                max_x=max_x+((h-w)//2)+20
-                min_y-=20
-                max_y+=20
-            # print(max_y-min_y,max_x-min_x)
-            if min_y<=0 or max_y>=ih:
-                #print("y> or y<")
-                return
-            if min_x<=0 or max_x>=iw :
-                #print("x> or x<")
-                return
-            # for i in[78,74,79,73,72,80,71,70,69,68,76,75,77]:# [78,74,79,73,72,69,68,76,75,77]:
-            face_contour_array=np.concatenate((landmarks_array[0:17],landmarks_array[[78,74,79,73,72,80,71,70,69,68,76,75,77]]))
-            face_mask=np.zeros((ih,iw),np.uint8)
-            landmark_img=np.zeros(frame.shape,np.uint8)
-            cv2.fillPoly(face_mask,[face_contour_array],(255,255,255),8,0)
-            # jaw = landmarks_array[0:17]
-            left_eyebrow = landmarks_array[22:27]
-            right_eyebrow =landmarks_array[17:22]
-            nose_bridge = landmarks_array[27:31]
-            lower_nose = landmarks_array[30:36]
-            left_eye = landmarks_array[42:48]
-            right_eye = landmarks_array[36:42]
-            outer_lip = landmarks_array[48:60]
-            inner_lip = landmarks_array[60:68]
-            # cv2.fillPoly(face_mask, [left_eyebrow],(0,0,0), 16,0)
-            # cv2.fillPoly(face_mask, [right_eyebrow], (0,0,0), 16,0)
-            cv2.polylines(face_mask, [left_eyebrow], False,(0,0,0), 2)
-            cv2.polylines(face_mask, [right_eyebrow], False, (0,0,0), 2)
-            # cv2.fillPoly(face_mask, [nose_bridge], (0,0,0), 16,0)
-            cv2.line(face_mask,nose_bridge[0],nose_bridge[-1],(0,0,0),2,16)
-            cv2.polylines(face_mask, [nose_bridge], True, (0,0,0), 3)
-            cv2.fillPoly(face_mask, [lower_nose], (0,0,0), 16,0)
-            cv2.fillPoly(face_mask, [left_eye], (0,0,0), 16,0)
-            cv2.fillPoly(face_mask, [right_eye], (0,0,0), 16,0)
-            cv2.fillPoly(face_mask, [outer_lip],(0,0,0), 16,0)
-            cv2.fillPoly(face_mask, [inner_lip],(255,255,255), 16,0)
-            # cv2.polylines(landmark_img, [jaw], False, (255,255,255), 3)
-            cv2.polylines(landmark_img, [face_contour_array], True, (255,255,255), 3)
-            #---landmark color---
-            if  args.color:
-                cv2.polylines(landmark_img, [left_eyebrow], False,(0,255,0), 3)
-                cv2.polylines(landmark_img, [right_eyebrow], False, (0,255,0), 3)
-                cv2.polylines(landmark_img, [nose_bridge], False, (255,0,0), 3)
-                cv2.polylines(landmark_img, [lower_nose], True, (255,0,0), 3)
-                cv2.polylines(landmark_img, [left_eye], True, (0,0,255), 3)
-                cv2.polylines(landmark_img, [right_eye], True, (0,0,255), 3)
-                cv2.polylines(landmark_img, [outer_lip], True,(255,255,0), 3)
-                cv2.polylines(landmark_img, [inner_lip], True,(0,255,255), 3)
-            #---landmark gray---
-            else:
-                cv2.polylines(landmark_img, [left_eyebrow], False,(255,255,255), 3)
-                cv2.polylines(landmark_img, [right_eyebrow], False, (255,255,255), 3)
-                cv2.polylines(landmark_img, [nose_bridge], False, (255,255,255), 3)
-                cv2.polylines(landmark_img, [lower_nose], True, (255,255,255), 3)
-                cv2.polylines(landmark_img, [left_eye], True, (255,255,255), 3)
-                cv2.polylines(landmark_img, [right_eye], True, (255,255,255), 3)
-                cv2.polylines(landmark_img, [outer_lip], True,(255,255,255), 3)
-                cv2.polylines(landmark_img, [inner_lip], True,(255,255,255), 3)
-                # cv2.fillPoly(landmark_img,reshape_for_polyline(landmarks),(255,255,255),8,0)
-                # cv2.polylines(landmark_img,reshape_for_polyline(landmarks),True,(255,255,255),3)
-            #------------------------
+        if min_x<=0 or max_x>=iw :
+            #print("x> or x<")
+            return
+        # for i in[78,74,79,73,72,80,71,70,69,68,76,75,77]:# [78,74,79,73,72,69,68,76,75,77]:
+        face_contour_array=np.concatenate((landmarks_array[0:17],landmarks_array[[78,74,79,73,72,80,71,70,69,68,76,75,77]]))
+        face_mask=np.zeros((ih,iw),np.uint8)
+        landmark_img=np.zeros(frame.shape,np.uint8)
+        cv2.fillPoly(face_mask,[face_contour_array],(255,255,255),8,0)
+        # jaw = landmarks_array[0:17]
+        left_eyebrow = landmarks_array[22:27]
+        right_eyebrow =landmarks_array[17:22]
+        nose_bridge = landmarks_array[27:31]
+        lower_nose = landmarks_array[30:36]
+        left_eye = landmarks_array[42:48]
+        right_eye = landmarks_array[36:42]
+        outer_lip = landmarks_array[48:60]
+        inner_lip = landmarks_array[60:68]
+        # cv2.fillPoly(face_mask, [left_eyebrow],(0,0,0), 16,0)
+        # cv2.fillPoly(face_mask, [right_eyebrow], (0,0,0), 16,0)
+        cv2.polylines(face_mask, [left_eyebrow], False,(0,0,0), 2)
+        cv2.polylines(face_mask, [right_eyebrow], False, (0,0,0), 2)
+        # cv2.fillPoly(face_mask, [nose_bridge], (0,0,0), 16,0)
+        cv2.line(face_mask,nose_bridge[0],nose_bridge[-1],(0,0,0),2,16)
+        cv2.polylines(face_mask, [nose_bridge], True, (0,0,0), 3)
+        cv2.fillPoly(face_mask, [lower_nose], (0,0,0), 16,0)
+        cv2.fillPoly(face_mask, [left_eye], (0,0,0), 16,0)
+        cv2.fillPoly(face_mask, [right_eye], (0,0,0), 16,0)
+        cv2.fillPoly(face_mask, [outer_lip],(0,0,0), 16,0)
+        cv2.fillPoly(face_mask, [inner_lip],(255,255,255), 16,0)
+        # cv2.polylines(landmark_img, [jaw], False, (255,255,255), 3)
+        cv2.polylines(landmark_img, [face_contour_array], True, (255,255,255), 3)
+        #---landmark color---
+        if  args.color:
+            cv2.polylines(landmark_img, [left_eyebrow], False,(0,255,0), 3)
+            cv2.polylines(landmark_img, [right_eyebrow], False, (0,255,0), 3)
+            cv2.polylines(landmark_img, [nose_bridge], False, (255,0,0), 3)
+            cv2.polylines(landmark_img, [lower_nose], True, (255,0,0), 3)
+            cv2.polylines(landmark_img, [left_eye], True, (0,0,255), 3)
+            cv2.polylines(landmark_img, [right_eye], True, (0,0,255), 3)
+            cv2.polylines(landmark_img, [outer_lip], True,(255,255,0), 3)
+            cv2.polylines(landmark_img, [inner_lip], True,(0,255,255), 3)
+        #---landmark gray---
+        else:
+            cv2.polylines(landmark_img, [left_eyebrow], False,(255,255,255), 3)
+            cv2.polylines(landmark_img, [right_eyebrow], False, (255,255,255), 3)
+            cv2.polylines(landmark_img, [nose_bridge], False, (255,255,255), 3)
+            cv2.polylines(landmark_img, [lower_nose], True, (255,255,255), 3)
+            cv2.polylines(landmark_img, [left_eye], True, (255,255,255), 3)
+            cv2.polylines(landmark_img, [right_eye], True, (255,255,255), 3)
+            cv2.polylines(landmark_img, [outer_lip], True,(255,255,255), 3)
+            cv2.polylines(landmark_img, [inner_lip], True,(255,255,255), 3)
+            # cv2.fillPoly(landmark_img,reshape_for_polyline(landmarks),(255,255,255),8,0)
+            # cv2.polylines(landmark_img,reshape_for_polyline(landmarks),True,(255,255,255),3)
+        #------------------------
 
-            # bg_mask=cv2.bitwise_not(face_mask)
-            # only_face=cv2.bitwise_and(frame,frame,mask=face_mask)
-            # only_bg=cv2.bitwise_and(frame,frame,mask=bg_mask)
-            # centroid_pos=landmarks[28]
-            crop_img=frame[min_y:max_y,min_x:max_x]
-            crop_landmark=landmark_img[min_y:max_y,min_x:max_x]
-            crop_face_mask=face_mask[min_y:max_y,min_x:max_x]
-            # crop_face=only_face[min_y:max_y,min_x:max_x]
-            # crop_bg=only_bg[min_y:max_y,min_x:max_x]
-            # crop_bg_mask=bg_mask[min_y:max_y,min_x:max_x]
-            if crop_img.shape[0]!=256 or crop_img.shape[1]!=256:
-                crop_img=cv2.resize(crop_img,(256,256))
-                crop_landmark=cv2.resize(crop_landmark,(256,256))
-                crop_face_mask=cv2.resize(crop_face_mask,(256,256))
-                # crop_face=cv2.resize(crop_face,(256,256))
-                # crop_bg=cv2.resize(crop_bg,(256,256))
-                # crop_bg_mask=cv2.resize(crop_bg_mask,(256,256))
-            # cv2.imwrite(f"{preprocess_original}/{count}.png",frame)
-            cv2.imwrite(f"{preprocess_img}/{count}.png",crop_img)
-            cv2.imwrite(f"{preprocess_landmark}/{count}.png",crop_landmark)
-            cv2.imwrite(f"{preprocess_face_mask}/{count}.png",crop_face_mask)
-            # cv2.imwrite(f"{preprocess_face}/{count}.png",crop_face)
-            # cv2.imwrite(f"{preprocess_background}/{count}.png",crop_bg)
-            # cv2.imwrite(f"{preprocess_background_mask}/{count}.png",crop_bg_mask)
+        # bg_mask=cv2.bitwise_not(face_mask)
+        # only_face=cv2.bitwise_and(frame,frame,mask=face_mask)
+        # only_bg=cv2.bitwise_and(frame,frame,mask=bg_mask)
+        # centroid_pos=landmarks[28]
+        crop_img=frame[min_y:max_y,min_x:max_x]
+        crop_landmark=landmark_img[min_y:max_y,min_x:max_x]
+        crop_face_mask=face_mask[min_y:max_y,min_x:max_x]
+        # crop_face=only_face[min_y:max_y,min_x:max_x]
+        # crop_bg=only_bg[min_y:max_y,min_x:max_x]
+        # crop_bg_mask=bg_mask[min_y:max_y,min_x:max_x]
+        if crop_img.shape[0]!=256 or crop_img.shape[1]!=256:
+            crop_img=cv2.resize(crop_img,(256,256))
+            crop_landmark=cv2.resize(crop_landmark,(256,256))
+            crop_face_mask=cv2.resize(crop_face_mask,(256,256))
+            # crop_face=cv2.resize(crop_face,(256,256))
+            # crop_bg=cv2.resize(crop_bg,(256,256))
+            # crop_bg_mask=cv2.resize(crop_bg_mask,(256,256))
+        # cv2.imwrite(f"{preprocess_original}/{count}.png",frame)
+        cv2.imwrite(f"{preprocess_img}/{count}.png",crop_img)
+        cv2.imwrite(f"{preprocess_landmark}/{count}.png",crop_landmark)
+        cv2.imwrite(f"{preprocess_face_mask}/{count}.png",crop_face_mask)
+        # cv2.imwrite(f"{preprocess_face}/{count}.png",crop_face)
+        # cv2.imwrite(f"{preprocess_background}/{count}.png",crop_bg)
+        # cv2.imwrite(f"{preprocess_background_mask}/{count}.png",crop_bg_mask)
 # print(vildeolist[343])
 # def main():
 # for idx,videofilename in enumerate(vildeolist[a:a+1]):

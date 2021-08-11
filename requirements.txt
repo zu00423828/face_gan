@@ -1,0 +1,8 @@
+opencv_python==4.5.2.54
+numpy==1.21.0
+torch==1.7.1+cu110
+tqdm==4.61.2
+torchvision==0.8.2+cu110
+adabelief_pytorch==0.2.0
+torchsummary==1.5.1
+dlib==19.22.0
