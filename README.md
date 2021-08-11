@@ -1,7 +1,9 @@
 preprocess data
+
 python data_preprocess/preprocess.py --input_dir $data_root --output_dir $out_dir  -t 20  -c 0.5  -color True
 
 split train val data
+
 python data_preprocess/split.py --input_dir $data_root --output_dir $data_root --train_frac 0.8
 
 train 
