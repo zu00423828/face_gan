@@ -134,7 +134,10 @@ class UpBlock(nn.Module):
         super(UpBlock, self).__init__()
         # self.up_sample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
         self.up_sample = nn.Sequential(nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True), nn.Conv2d(
-            in_channels, out_channels, kernel_size=1,bias=False),nn.BatchNorm2d(out_channels),nn.ReLU(True))
+            in_channels, out_channels, kernel_size=1,bias=False),
+            nn.BatchNorm2d(out_channels),
+            # nn.InstanceNorm2d(out_channels,affine=True),
+            nn.ReLU(True))
         self.double_conv = DoubleConv(in_channels, out_channels)
 
     def forward(self, down_input, skip_input):
@@ -162,7 +165,7 @@ class ResUnet(nn.Module):
         self.map_layer = nn.Sequential(nn.Upsample(
             scale_factor=2), nn.Conv2d(128, 1, 1), nn.Sigmoid())
         self.conv_last = nn.Sequential(
-            nn.Conv2d(64, out_clasess, 1), nn.Tanh())
+            nn.Conv2d(64+1, out_clasess, 1), nn.Tanh())
 
     def forward(self, x):
         x, skip1_out = self.down_conv1(x)
@@ -174,8 +177,9 @@ class ResUnet(nn.Module):
         x = self.up_conv3(x, skip3_out)
         x = self.up_conv2(x, skip2_out)
         map = self.map_layer(x)
-        x = self.up_conv1(x, skip1_out)
-        x = self.conv_last(x)
+        x = self.up_conv1(x, skip1_out) #64_channel
+        last_skip=torch.cat([x,map],dim=1)
+        x = self.conv_last(last_skip)
         return x, map
 
 

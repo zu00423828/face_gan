@@ -135,7 +135,7 @@ if __name__=="__main__":
     ap.add_argument("--output_dir",dest="output_dir",required=True,type=str)
     ap.add_argument("--t",dest="threshold",default=20.,type=float)
     ap.add_argument("--c",dest="confidence",default=0.5,type=float)
-    ap.add_argument("--colot",dest="color",default=1,type=int)
+    ap.add_argument("--color",dest="color",default=1,type=int)
     args=ap.parse_args()
     # vildeolist=os.listdir("avspeech")
     # output_root="preprocess4"

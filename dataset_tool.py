@@ -1,12 +1,11 @@
-import enum
+import csv
 import os
-import random
+from random import randint
 import cv2
 import numpy as np
 import torch
 from torchvision import transforms
 from torch.utils.data import Dataset
-import glob
 import dlib
 class BaseDataSet(Dataset):
     def __init__(self,dir_root,resize=None,transform=None):
@@ -57,28 +56,31 @@ class BaseDataSet(Dataset):
 # augment=transforms.Compose([transforms.ToTensor(),transforms.Resize(256)])
 augment=transforms.Compose([transforms.ToTensor()])
 class TestDataSet(Dataset):
-    def __init__(self, root,resize):
-        img_dir = glob.glob(f"{root}/img/*/")
-        landmark_dir = glob.glob(f"{root}/landmarks/*/")
-        face_mask_dir = glob.glob(f"{root}/face_mask/*/")
-        self.img_list, self.landmark_list, self.face_mask_list = self.get_file_list(img_dir,landmark_dir,face_mask_dir)
-        self.video_name=[item.split("/")[-2] for item in self.img_list]
+    def __init__(self, root,split,resize,landmark_gray=False):
+        self.filelist,self.video_name= self.get_file_list(root,split)
         self.resize=(resize,resize)
+        self.landmark_gray=landmark_gray
     def __len__(self):
         return len(self.video_name)
     def __getitem__(self, index):
-        rand_idx=self.random_get(index)
+        rand_idx=self.random_get(index,self.video_name)
         # landmark_img=cv2.imread(self.landmark_list[index],cv2.IMREAD_GRAYSCALE)
-        landmark_img=cv2.resize(cv2.imread(self.landmark_list[index]),self.resize,interpolation=cv2.INTER_AREA)
-        reference_img=cv2.resize(cv2.imread(self.img_list[rand_idx]),self.resize,interpolation=cv2.INTER_AREA)
-        face_mask_img=cv2.resize(cv2.imread(self.face_mask_list[index],cv2.IMREAD_GRAYSCALE),self.resize,interpolation=cv2.INTER_AREA)
-        target_img=cv2.resize(cv2.imread(self.img_list[index]),self.resize,interpolation=cv2.INTER_AREA)
+        if not self.landmark_gray:
+            landmark_img=cv2.resize(cv2.imread(self.filelist[index][0]),self.resize,interpolation=cv2.INTER_AREA)
+        else:
+            landmark_img=cv2.resize(cv2.imread(self.filelist[index][0],cv2.IMREAD_GRAYSCALE),self.resize,interpolation=cv2.INTER_AREA)
+        reference_img=cv2.resize(cv2.imread(self.filelist[rand_idx][1]),self.resize,interpolation=cv2.INTER_AREA)
+        face_mask_img=cv2.resize(cv2.imread(self.filelist[index][2],cv2.IMREAD_GRAYSCALE),self.resize,interpolation=cv2.INTER_AREA)
+        target_img=cv2.resize(cv2.imread(self.filelist[index][1]),self.resize,interpolation=cv2.INTER_AREA)
         landmark_img= augment(landmark_img)
         reference_img=augment(reference_img)
         target_img=augment(target_img)
         face_mask_img=augment(face_mask_img)
+        # other_reference=self.random_feture(index,self.video_name)
+        # other_reference=augment(other_reference)
+        
         input_img=torch.cat([landmark_img,reference_img],dim=0)
-        return input_img,target_img,face_mask_img
+        return input_img,target_img,face_mask_img#,other_reference
         # return landmark_img,reference_img,target_img,face_mask_img
 
     def landmark(img):
@@ -103,27 +105,44 @@ class TestDataSet(Dataset):
             cv2.fillPoly(face_mask,(np.array(face_contour)),(255,255,255),8,0)
             cv2.fillPoly(landmarks_img,np.array(landmarks).reshape(-1,1,2),(255,255,255),8,0)
             
-    def get_file_list(self,img_dir,landmark_dir,face_mask_dir):
-        all_img_list = []
-        all_landmark_list = []
-        all_face_mask_list = []
-        for dir in img_dir:
-            temp_list = [os.path.join(dir, file) for file in os.listdir(dir)]
-            all_img_list.extend(temp_list)
-        for dir in landmark_dir:
-            temp_list = [os.path.join(dir, file) for file in os.listdir(dir)]
-            all_landmark_list.extend(temp_list)
-        for dir in face_mask_dir:
-            temp_list = [os.path.join(dir, file) for file in os.listdir(dir)]
-            all_face_mask_list.extend(temp_list)
-        return all_img_list, all_landmark_list, all_face_mask_list
-    def random_get(self,idx):
-        min_idx=self.video_name.index(self.video_name[idx])
-        max_idx=len(self.video_name)-1-self.video_name[::-1].index(self.video_name[idx])
-        r_idx=random.randint(min_idx,max_idx)
+    def get_file_list(self,root,split):
+        filelist=[]
+        videoname=[]
+        with open(f"{root}/{split}_list.csv",newline='')as csvfile:
+            rows = csv.reader(csvfile)
+            path_join=os.path.join
+            filelist_append=filelist.append
+            videoname_append=videoname.append
+            for row in rows:
+                filelist_append([path_join(root,file)for file in row])
+                videoname_append(row[0].split("/")[-2])
+        return filelist,videoname
+    def random_get(self,idx,video_name):
+        min_idx=video_name.index(video_name[idx])
+        max_idx=len(video_name)-1-video_name[::-1].index(video_name[idx])
+        r_idx=randint(min_idx,max_idx)
+        r_idx=randint(min_idx,max_idx)
         while idx==r_idx:
-            r_idx=random.randint(min_idx,max_idx)
+            r_idx=randint(min_idx,max_idx)
         return  r_idx
+    def random_feture(self,idx,video_name):
+        min_idx=video_name.index(video_name[idx])
+        max_idx=len(video_name)-1-video_name[::-1].index(video_name[idx])
+        r_idx=randint(min_idx,max_idx)
+        featurelist=[]
+        while len(featurelist)<8:
+            if idx!=r_idx and r_idx not in featurelist:
+                    featurelist.append(r_idx)
+            r_idx=randint(min_idx,max_idx)
+        feature_img=None
+        for i in featurelist:
+            img=cv2.imread(self.filelist[i][1])
+            if feature_img is None:
+                feature_img=img
+            else:
+                feature_img=np.concatenate((feature_img,img),axis=2)
+        feature_img=cv2.resize(feature_img,self.resize)
+        return  feature_img
 
 
 
@@ -149,8 +168,7 @@ if __name__=='__main__':
     # print(len(dataset))
     # a = TestDataSet("/home/yuan/hdd/avspeech_preprocess/test/train")
     # print(len(a))
-    a = TestDataSet("/home/yuan/hdd/avspeech_preprocess/train")
-
-
-
+    # a = TestDataSet("/home/yuan/hdd/avspeech_preprocess/train")
+    train_dataset=TestDataSet("/home/yuan/hdd/avspeech_preprocess/preprocess4","train",resize=256)
+    print(train_dataset[0][-1].shape)
  
